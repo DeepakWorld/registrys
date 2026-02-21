@@ -41,10 +41,14 @@ $log = setupLogger('php://stderr', 'API');
 
 // 5. Connect to Supabase
 try {
-    $dsn = "pgsql:host={$c['db_host']};port={$c['db_port']};dbname={$c['db_database']}";
+    // Added sslmode=require for Supabase compatibility
+    // Added a 5-second timeout to prevent the script from hanging
+    $dsn = "pgsql:host={$c['db_host']};port={$c['db_port']};dbname={$c['db_database']};sslmode=require";
+    
     $pdo = new PDO($dsn, $c['db_username'], $c['db_password'], [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_TIMEOUT => 5 
     ]);
 } catch (PDOException $e) {
     header("Content-Type: application/json");
@@ -52,7 +56,7 @@ try {
     echo json_encode([
         "status" => "error", 
         "message" => "Database connection error",
-        "debug" => $e->getMessage() // THIS WILL TELL US THE REAL PROBLEM
+        "debug" => $e->getMessage()
     ]);
     exit;
 }
@@ -61,6 +65,7 @@ try {
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 header("Content-Type: application/json");
 
+// Clean path: removes '/api' if present
 $path = str_replace('/api', '', $path);
 if ($path === '' || $path === '/') {
     $path = '/index';
@@ -90,7 +95,7 @@ switch ($path) {
             echo json_encode($stmt->fetchAll());
         } catch (Exception $e) {
             http_response_code(500);
-            echo json_encode(["error" => "Query failed"]);
+            echo json_encode(["error" => "Query failed", "debug" => $e->getMessage()]);
         }
         break;
 
