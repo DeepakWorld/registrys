@@ -32,11 +32,11 @@ if (file_exists($configPath)) {
 if (empty($c['db_host']) || empty($c['db_password'])) {
     header("Content-Type: application/json");
     http_response_code(500);
-    echo json_encode(["error" => "Database configuration missing (no config.php or ENV vars)."]);
+    echo json_encode(["error" => "Database configuration missing."]);
     exit;
 }
 
-// 4. Initialize Logger (Must be defined in helpers.php)
+// 4. Initialize Logger
 $log = setupLogger('php://stderr', 'API');
 
 // 5. Connect to Supabase
@@ -47,12 +47,13 @@ try {
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
     ]);
 } catch (PDOException $e) {
-    if (isset($log)) {
-        $log->error("Database connection failed: " . $e->getMessage());
-    }
     header("Content-Type: application/json");
     http_response_code(500);
-    echo json_encode(["status" => "error", "message" => "Database connection error"]);
+    echo json_encode([
+        "status" => "error", 
+        "message" => "Database connection error",
+        "debug" => $e->getMessage() // THIS WILL TELL US THE REAL PROBLEM
+    ]);
     exit;
 }
 
@@ -60,7 +61,6 @@ try {
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 header("Content-Type: application/json");
 
-// Clean path: removes '/api' if present
 $path = str_replace('/api', '', $path);
 if ($path === '' || $path === '/') {
     $path = '/index';
