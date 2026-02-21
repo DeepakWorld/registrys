@@ -1,14 +1,39 @@
 <?php
 // api/index.php
 
-// 1. Load Dependencies
-require_once __DIR__ . '/../vendor/autoload.php';
-$c = require_once __DIR__ . '/../config.php';
-// helpers.php is loaded via composer autoload or require_once
+// 1. Safe Autoload Loading
+// We define the path once and check it before requiring to prevent Fatal Errors
+$autoloadPath = __DIR__ . '/../vendor/autoload.php';
 
+if (file_exists($autoloadPath)) {
+    require_once $autoloadPath;
+} else {
+    header("Content-Type: application/json");
+    http_response_code(500);
+    echo json_encode([
+        "error" => "Autoload not found. Ensure composer.json is in the root directory.",
+        "debug_path" => $autoloadPath
+    ]);
+    exit;
+}
+
+// 2. Load Config
+// Assuming config.php is in the root directory
+$configPath = __DIR__ . '/../config.php';
+if (file_exists($configPath)) {
+    $c = require_once $configPath;
+} else {
+    header("Content-Type: application/json");
+    http_response_code(500);
+    echo json_encode(["error" => "Config file not found at root."]);
+    exit;
+}
+
+// 3. Initialize Logger
+// setupLogger must be defined in helpers.php (which is loaded via composer autoload)
 $log = setupLogger('php://stderr', 'API');
 
-// 2. Connect to Supabase (Postgres)
+// 4. Connect to Supabase (Postgres)
 try {
     $dsn = "pgsql:host={$c['db_host']};port={$c['db_port']};dbname={$c['db_database']}";
     $pdo = new PDO($dsn, $c['db_username'], $c['db_password'], [
@@ -16,31 +41,51 @@ try {
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
     ]);
 } catch (PDOException $e) {
-    $log->error("Database connection failed: " . $e->getMessage());
+    if (isset($log)) {
+        $log->error("Database connection failed: " . $e->getMessage());
+    }
     header("Content-Type: application/json");
     http_response_code(500);
     echo json_encode(["status" => "error", "message" => "Database connection error"]);
     exit;
 }
 
-// 3. Routing Logic
+// 5. Routing Logic
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 header("Content-Type: application/json");
 
-// Clean the path (removes /api prefix if Vercel includes it)
+// Clean the path
 $path = str_replace('/api', '', $path);
+if ($path === '' || $path === '/') {
+    $path = '/index'; // Default route
+}
 
 switch ($path) {
     case '/availability':
         $domain = $_GET['domain'] ?? null;
-        // ... include your domain logic from start_api.php here ...
-        // Use $pdo->prepare() and echo json_encode()
-        echo json_encode(["status" => "success", "domain" => $domain]);
+        if (!$domain) {
+            echo json_encode(["status" => "error", "message" => "Missing domain parameter"]);
+            break;
+        }
+        // Example Postgres Query
+        $stmt = $pdo->prepare("SELECT name FROM domain WHERE name = :name LIMIT 1");
+        $stmt->execute(['name' => $domain]);
+        $exists = $stmt->fetch();
+        
+        echo json_encode([
+            "status" => "success", 
+            "domain" => $domain,
+            "available" => $exists ? false : true
+        ]);
         break;
 
     case '/registrars':
-        $stmt = $pdo->query("SELECT name, url, abuse_email, iana_id FROM registrar");
-        echo json_encode($stmt->fetchAll());
+        try {
+            $stmt = $pdo->query("SELECT name, url, abuse_email, iana_id FROM registrar");
+            echo json_encode($stmt->fetchAll());
+        } catch (Exception $e) {
+            echo json_encode(["error" => "Query failed"]);
+        }
         break;
 
     default:
