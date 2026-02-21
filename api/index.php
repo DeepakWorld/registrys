@@ -1,23 +1,21 @@
 <?php
-// api/index.php
+// 1. Define the correct path to the autoloader (go up one level from /api to root)
+$autoloadPath = __DIR__ . '/../vendor/autoload.php';
 
-// 1. Safe Autoload Loading
-// We define the path once and check it before requiring to prevent Fatal Errors
-require __DIR__ . '/../vendor/autoload.php';
-
-
-if (file_exists($autoloadPath)) {
-    require_once $autoloadPath;
-} else {
-    header("Content-Type: application/json");
+// 2. Check if the file actually exists
+if (!file_exists($autoloadPath)) {
+    header('Content-Type: application/json');
     http_response_code(500);
     echo json_encode([
-        "error" => "Autoload not found. Ensure composer.json is in the root directory.",
-        "debug_path" => $autoloadPath
+        "error" => "Autoload not found.",
+        "debug_path" => $autoloadPath,
+        "suggestion" => "Check if composer.json is in the root and Vercel build succeeded."
     ]);
     exit;
 }
 
+// 3. Include the autoloader
+require_once $autoloadPath;
 // 2. Load Config
 // Assuming config.php is in the root directory
 $configPath = __DIR__ . '/../config.php';
