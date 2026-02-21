@@ -1,38 +1,45 @@
 <?php
-// 1. Define the correct path to the autoloader (go up one level from /api to root)
+// 1. Paths
 $autoloadPath = __DIR__ . '/../vendor/autoload.php';
+$configPath   = __DIR__ . '/../config.php';
 
-// 2. Check if the file actually exists
+// 2. Load Autoloader First
 if (!file_exists($autoloadPath)) {
     header('Content-Type: application/json');
     http_response_code(500);
     echo json_encode([
         "error" => "Autoload not found.",
-        "debug_path" => $autoloadPath,
-        "suggestion" => "Check if composer.json is in the root and Vercel build succeeded."
+        "debug_path" => $autoloadPath
     ]);
     exit;
 }
-
-// 3. Include the autoloader
 require_once $autoloadPath;
-// 2. Load Config
-// Assuming config.php is in the root directory
-$configPath = __DIR__ . '/../config.php';
+
+// 3. Load Config (Local file OR Environment Variables)
 if (file_exists($configPath)) {
     $c = require_once $configPath;
 } else {
+    $c = [
+        'db_host'     => getenv('DB_HOST'),
+        'db_port'     => getenv('DB_PORT') ?: '5432',
+        'db_database' => getenv('DB_DATABASE'),
+        'db_username' => getenv('DB_USERNAME'),
+        'db_password' => getenv('DB_PASSWORD'),
+    ];
+}
+
+// Validate config exists
+if (empty($c['db_host']) || empty($c['db_password'])) {
     header("Content-Type: application/json");
     http_response_code(500);
-    echo json_encode(["error" => "Config file not found at root."]);
+    echo json_encode(["error" => "Database configuration missing (no config.php or ENV vars)."]);
     exit;
 }
 
-// 3. Initialize Logger
-// setupLogger must be defined in helpers.php (which is loaded via composer autoload)
+// 4. Initialize Logger (Must be defined in helpers.php)
 $log = setupLogger('php://stderr', 'API');
 
-// 4. Connect to Supabase (Postgres)
+// 5. Connect to Supabase
 try {
     $dsn = "pgsql:host={$c['db_host']};port={$c['db_port']};dbname={$c['db_database']}";
     $pdo = new PDO($dsn, $c['db_username'], $c['db_password'], [
@@ -49,14 +56,14 @@ try {
     exit;
 }
 
-// 5. Routing Logic
+// 6. Routing Logic
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 header("Content-Type: application/json");
 
-// Clean the path
+// Clean path: removes '/api' if present
 $path = str_replace('/api', '', $path);
 if ($path === '' || $path === '/') {
-    $path = '/index'; // Default route
+    $path = '/index';
 }
 
 switch ($path) {
@@ -66,7 +73,6 @@ switch ($path) {
             echo json_encode(["status" => "error", "message" => "Missing domain parameter"]);
             break;
         }
-        // Example Postgres Query
         $stmt = $pdo->prepare("SELECT name FROM domain WHERE name = :name LIMIT 1");
         $stmt->execute(['name' => $domain]);
         $exists = $stmt->fetch();
@@ -83,6 +89,7 @@ switch ($path) {
             $stmt = $pdo->query("SELECT name, url, abuse_email, iana_id FROM registrar");
             echo json_encode($stmt->fetchAll());
         } catch (Exception $e) {
+            http_response_code(500);
             echo json_encode(["error" => "Query failed"]);
         }
         break;

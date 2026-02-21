@@ -1,0 +1,9 @@
+# Ignore the local config file containing secrets
+config.php
+
+# Ignore the vendor folder (Vercel will build this itself)
+vendor/
+
+# Ignore OS metadata
+.DS_Store
+Thumbs.db
