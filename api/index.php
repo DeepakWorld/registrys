@@ -3,7 +3,8 @@
 
 // 1. Safe Autoload Loading
 // We define the path once and check it before requiring to prevent Fatal Errors
-$autoloadPath = __DIR__ . '/../vendor/autoload.php';
+require __DIR__ . '/../vendor/autoload.php';
+
 
 if (file_exists($autoloadPath)) {
     require_once $autoloadPath;
